@@ -99,8 +99,11 @@ object PrayerRepo {
         if (today.dayOfMonth >= 25) loadMonth(ctx, YearMonth.from(today.plusMonths(1)))
     }
 
-    fun timesFor(ctx: Context, date: LocalDate): List<LocalTime>? =
-        loadMonth(ctx, YearMonth.from(date))?.get(date)
+    /** Jadwal hari itu, sudah ditambah koreksi menit per waktu sholat. */
+    fun timesFor(ctx: Context, date: LocalDate): List<LocalTime>? {
+        val raw = loadMonth(ctx, YearMonth.from(date))?.get(date) ?: return null
+        return raw.mapIndexed { i, t -> t.plusMinutes(Settings.offset(ctx, i).toLong()) }
+    }
 
     /** Index sholat berikutnya + waktunya. */
     fun next(ctx: Context, now: LocalDateTime): Pair<Int, LocalDateTime>? {
