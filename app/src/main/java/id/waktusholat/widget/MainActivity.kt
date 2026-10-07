@@ -3,6 +3,8 @@ package id.waktusholat.widget
 import android.Manifest
 import android.app.Activity
 import android.app.AlertDialog
+import android.appwidget.AppWidgetManager
+import android.content.ComponentName
 import android.content.pm.PackageManager
 import android.graphics.Typeface
 import android.location.Geocoder
@@ -73,6 +75,7 @@ class MainActivity : Activity() {
         status = TextView(this).apply { textSize = 13f; setPadding(0, dp(12), 0, dp(16)) }
         root.addView(status)
 
+        root.addView(button("Pasang widget ke home screen") { pinWidget() })
         root.addView(button("Pakai lokasi GPS") { useGps() })
         root.addView(button("Pilih kota manual") { pickCity() })
         root.addView(button("Muat ulang data") { refresh() })
@@ -115,6 +118,19 @@ class MainActivity : Activity() {
                     status.text = "Sumber: Aladhan API (metode Kemenag RI)"
                 }
             }
+        }
+    }
+
+    private fun pinWidget() {
+        val mgr = getSystemService(AppWidgetManager::class.java)
+        if (mgr.isRequestPinAppWidgetSupported) {
+            mgr.requestPinAppWidget(ComponentName(this, PrayerWidget::class.java), null, null)
+        } else {
+            Toast.makeText(
+                this,
+                "Launcher tidak mendukung. Tambahkan lewat menu Widget di home screen.",
+                Toast.LENGTH_LONG
+            ).show()
         }
     }
 
