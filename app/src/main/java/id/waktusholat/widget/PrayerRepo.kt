@@ -15,7 +15,7 @@ import java.util.Locale
 import java.util.TimeZone
 
 object PrayerRepo {
-    val NAMES = listOf("Subuh", "Dzuhur", "Ashar", "Maghrib", "Isya")
+    val NAMES = listOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha")
     private val KEYS = listOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha")
     private val DATE_FMT = DateTimeFormatter.ofPattern("dd-MM-yyyy")
 
@@ -116,5 +116,37 @@ object PrayerRepo {
         val tomorrow = today.plusDays(1)
         val tm = timesFor(ctx, tomorrow) ?: return null
         return 0 to tomorrow.atTime(tm[0])
+    }
+
+    data class Status(
+        val currentIdx: Int?,
+        val currentTime: LocalDateTime?,
+        val nextIdx: Int,
+        val nextTime: LocalDateTime
+    )
+
+    /** Sholat berikutnya + (jika masih dalam masa grace) sholat yang baru masuk. */
+    fun status(ctx: Context, now: LocalDateTime): Status? {
+        val nxt = next(ctx, now) ?: return null
+        var curIdx: Int? = null
+        var curTime: LocalDateTime? = null
+        val grace = Settings.grace(ctx)
+        if (grace > 0) {
+            val today = now.toLocalDate()
+            val t = timesFor(ctx, today)
+            if (t != null) {
+                for (i in 4 downTo 0) {
+                    val dt = today.atTime(t[i])
+                    if (!dt.isAfter(now)) {
+                        if (now.isBefore(dt.plusMinutes(grace.toLong()))) {
+                            curIdx = i
+                            curTime = dt
+                        }
+                        break
+                    }
+                }
+            }
+        }
+        return Status(curIdx, curTime, nxt.first, nxt.second)
     }
 }

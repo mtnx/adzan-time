@@ -30,7 +30,7 @@ object Notifier {
 
     private fun notifyNow(ctx: Context, idx: Int) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        val ch = NotificationChannel(CHANNEL, "Pengingat waktu sholat", NotificationManager.IMPORTANCE_HIGH)
+        val ch = NotificationChannel(CHANNEL, "Prayer time alerts", NotificationManager.IMPORTANCE_HIGH)
         ch.enableVibration(true)
         nm.createNotificationChannel(ch)
 
@@ -48,8 +48,8 @@ object Notifier {
         )
         val n = Notification.Builder(ctx, CHANNEL)
             .setSmallIcon(R.drawable.ic_notif)
-            .setContentTitle("Waktu $name")
-            .setContentText("Telah masuk waktu $name ($time) untuk wilayah $loc")
+            .setContentTitle("$name time")
+            .setContentText("It's time for $name ($time) in $loc")
             .setContentIntent(open)
             .setCategory(Notification.CATEGORY_REMINDER)
             .setAutoCancel(true)

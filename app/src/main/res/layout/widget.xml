@@ -13,10 +13,11 @@
         android:layout_height="wrap_content"
         android:orientation="horizontal">
         <TextView
+            android:id="@+id/label"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:text="🌙  Sholat berikutnya"
+            android:text="🌙  Next prayer"
             android:textColor="#9FBFC4"
             android:textSize="11sp" />
         <TextView

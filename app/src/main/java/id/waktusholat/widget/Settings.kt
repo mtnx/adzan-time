@@ -16,6 +16,10 @@ object Settings {
     fun offset(ctx: Context, i: Int) = p(ctx).getInt("off$i", 0)
     fun setOffset(ctx: Context, i: Int, v: Int) = p(ctx).edit().putInt("off$i", v).apply()
 
+    /** Menit sholat yang baru masuk tetap ditampilkan sebelum pindah ke sholat berikutnya. */
+    fun grace(ctx: Context) = p(ctx).getInt("grace", 30)
+    fun setGrace(ctx: Context, v: Int) = p(ctx).edit().putInt("grace", v).apply()
+
     fun adzanFile(ctx: Context) = File(ctx.filesDir, "adzan.audio")
     fun hasAdzan(ctx: Context) = adzanFile(ctx).let { it.exists() && it.length() > 0 }
     fun adzanName(ctx: Context) = p(ctx).getString("adzan_name", "adzan") ?: "adzan"

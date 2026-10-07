@@ -29,7 +29,7 @@ class AdzanService : Service() {
 
         val nm = getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(
-            NotificationChannel(CHANNEL, "Adzan sedang diputar", NotificationManager.IMPORTANCE_LOW)
+            NotificationChannel(CHANNEL, "Adhan playing", NotificationManager.IMPORTANCE_LOW)
         )
         val stop = PendingIntent.getService(
             this, 2, Intent(this, AdzanService::class.java).setAction(ACTION_STOP),
@@ -41,13 +41,13 @@ class AdzanService : Service() {
         )
         val n = Notification.Builder(this, CHANNEL)
             .setSmallIcon(R.drawable.ic_notif)
-            .setContentTitle("Adzan $name")
-            .setContentText("Telah masuk waktu $name")
+            .setContentTitle("Adhan - $name")
+            .setContentText("It's time for $name")
             .setContentIntent(open)
             .setOngoing(true)
             .addAction(
                 Notification.Action.Builder(
-                    Icon.createWithResource(this, R.drawable.ic_notif), "Hentikan", stop
+                    Icon.createWithResource(this, R.drawable.ic_notif), "Stop", stop
                 ).build()
             )
             .build()

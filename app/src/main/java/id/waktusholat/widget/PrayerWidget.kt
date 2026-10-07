@@ -45,7 +45,7 @@ class PrayerWidget : AppWidgetProvider() {
 
             val now = LocalDateTime.now()
             val today = PrayerRepo.timesFor(ctx, LocalDate.now())
-            val nxt = PrayerRepo.next(ctx, now)
+            val st = PrayerRepo.status(ctx, now)
             val loc = PrayerRepo.getLoc(ctx)
             val rv = RemoteViews(ctx.packageName, R.layout.widget)
 
@@ -56,10 +56,11 @@ class PrayerWidget : AppWidgetProvider() {
             rv.setOnClickPendingIntent(R.id.root, open)
             rv.setTextViewText(R.id.loc, loc.label)
 
-            if (today == null || nxt == null) {
-                rv.setTextViewText(R.id.next_name, "Tidak ada data")
+            if (today == null || st == null) {
+                rv.setTextViewText(R.id.label, "🌙  Next prayer")
+                rv.setTextViewText(R.id.next_name, "No data")
                 rv.setViewVisibility(R.id.countdown, View.GONE)
-                rv.setTextViewText(R.id.next_sub, "Hubungkan internet lalu ketuk widget")
+                rv.setTextViewText(R.id.next_sub, "Connect to the internet, then tap the widget")
                 for (i in 0..4) {
                     rv.setTextViewText(NAME_IDS[i], PrayerRepo.NAMES[i])
                     rv.setTextViewText(TIME_IDS[i], "--:--")
@@ -69,24 +70,42 @@ class PrayerWidget : AppWidgetProvider() {
                 return
             }
 
-            val remaining = Duration.between(now, nxt.second).toMillis()
-            rv.setViewVisibility(R.id.countdown, View.VISIBLE)
-            rv.setChronometerCountDown(R.id.countdown, true)
-            rv.setChronometer(R.id.countdown, SystemClock.elapsedRealtime() + remaining, null, true)
+            val cur = st.currentIdx
+            val ct = st.currentTime
+            val tomorrow = st.nextTime.toLocalDate() != LocalDate.now()
+            val hlIdx = cur ?: (if (tomorrow) -1 else st.nextIdx)
 
-            rv.setTextViewText(R.id.next_name, PrayerRepo.NAMES[nxt.first])
-            val tomorrow = nxt.second.toLocalDate() != LocalDate.now()
-            rv.setTextViewText(
-                R.id.next_sub,
-                "pukul ${nxt.second.toLocalTime()}" + if (tomorrow) " (besok)" else ""
-            )
+            rv.setViewVisibility(R.id.countdown, View.VISIBLE)
+            if (cur != null && ct != null) {
+                // Masih dalam masa grace: tampilkan sholat yang baru masuk, timer menghitung maju
+                val elapsed = Duration.between(ct, now).toMillis()
+                rv.setTextViewText(R.id.label, "🌙  Prayer time now")
+                rv.setTextViewText(R.id.next_name, PrayerRepo.NAMES[cur])
+                rv.setChronometerCountDown(R.id.countdown, false)
+                rv.setChronometer(R.id.countdown, SystemClock.elapsedRealtime() - elapsed, "+%s", true)
+                rv.setTextViewText(
+                    R.id.next_sub,
+                    "since ${ct.toLocalTime()} • next: ${PrayerRepo.NAMES[st.nextIdx]} ${st.nextTime.toLocalTime()}"
+                )
+            } else {
+                val remaining = Duration.between(now, st.nextTime).toMillis()
+                rv.setTextViewText(R.id.label, "🌙  Next prayer")
+                rv.setTextViewText(R.id.next_name, PrayerRepo.NAMES[st.nextIdx])
+                rv.setChronometerCountDown(R.id.countdown, true)
+                rv.setChronometer(R.id.countdown, SystemClock.elapsedRealtime() + remaining, null, true)
+                rv.setTextViewText(
+                    R.id.next_sub,
+                    "at ${st.nextTime.toLocalTime()}" + if (tomorrow) " (tomorrow)" else ""
+                )
+            }
+
             for (i in 0..4) {
                 rv.setTextViewText(NAME_IDS[i], PrayerRepo.NAMES[i])
                 rv.setTextViewText(TIME_IDS[i], today[i].toString())
-                val highlight = i == nxt.first && !tomorrow
-                rv.setTextColor(TIME_IDS[i], if (highlight) ACCENT else WHITE)
-                rv.setTextColor(NAME_IDS[i], if (highlight) ACCENT else MUTED)
-                rv.setInt(CHIP_IDS[i], "setBackgroundResource", if (highlight) R.drawable.chip_active else 0)
+                val hl = i == hlIdx
+                rv.setTextColor(TIME_IDS[i], if (hl) ACCENT else WHITE)
+                rv.setTextColor(NAME_IDS[i], if (hl) ACCENT else MUTED)
+                rv.setInt(CHIP_IDS[i], "setBackgroundResource", if (hl) R.drawable.chip_active else 0)
             }
             mgr.updateAppWidget(ids, rv)
         }

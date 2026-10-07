@@ -46,6 +46,7 @@ class MainActivity : Activity() {
     private val cRowActive = Color.parseColor("#33FFC857")
 
     private lateinit var locText: TextView
+    private lateinit var heroLabel: TextView
     private lateinit var heroName: TextView
     private lateinit var heroSub: TextView
     private lateinit var chrono: Chronometer
@@ -58,7 +59,7 @@ class MainActivity : Activity() {
     private val modeViews = ArrayList<TextView>()
     private val stepperUpdaters = ArrayList<() -> Unit>()
 
-    private var chronoBase = 0L
+    private var modeChangeAt = Long.MAX_VALUE
     private var nextIdx = 0
     @Volatile private var busy = false
     private val handler = Handler(Looper.getMainLooper())
@@ -133,7 +134,7 @@ class MainActivity : Activity() {
         return v
     }
 
-    private fun fmtOff(v: Int) = if (v > 0) "+$v mnt" else "$v mnt"
+    private fun fmtOff(v: Int) = if (v > 0) "+$v min" else "$v min"
 
     private fun smallBtn(label: String, onClick: () -> Unit) = TextView(this).apply {
         text = label
@@ -146,7 +147,12 @@ class MainActivity : Activity() {
         setOnClickListener { onClick() }
     }
 
-    private fun stepper(title: String, value: (() -> Int)?, onDelta: (Int) -> Unit): LinearLayout {
+    private fun stepper(
+        title: String,
+        value: (() -> Int)?,
+        format: (Int) -> String,
+        onDelta: (Int) -> Unit
+    ): LinearLayout {
         val row = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -160,7 +166,7 @@ class MainActivity : Activity() {
             minWidth = dp(76)
         }
         fun upd() {
-            vt.text = if (value == null) "semua" else fmtOff(value())
+            vt.text = if (value == null) "all" else format(value())
         }
         upd()
         stepperUpdaters.add { upd() }
@@ -195,7 +201,7 @@ class MainActivity : Activity() {
         }
 
         // Header
-        root.addView(tv("🌙  Waktu Sholat", 26f, cText, true))
+        root.addView(tv("🌙  Prayer Times", 26f, cText, true))
         locText = tv("", 14f, cMuted, false).apply { setPadding(0, dp(4), 0, dp(16)) }
         root.addView(locText)
 
@@ -209,7 +215,8 @@ class MainActivity : Activity() {
             ).apply { cornerRadius = dp(28).toFloat() }
             layoutParams = cardParams()
         }
-        hero.addView(tv("Sholat berikutnya", 13f, Color.parseColor("#CFE6E8"), false))
+        heroLabel = tv("Next prayer", 13f, Color.parseColor("#CFE6E8"), false)
+        hero.addView(heroLabel)
         heroName = tv("—", 36f, cAccent, true)
         hero.addView(heroName)
         chrono = Chronometer(this).apply {
@@ -218,7 +225,7 @@ class MainActivity : Activity() {
             setTypeface(typeface, Typeface.BOLD)
             setCountDown(true)
             setOnChronometerTickListener {
-                if (SystemClock.elapsedRealtime() > chronoBase + 1500 && !busy) refresh()
+                if (SystemClock.elapsedRealtime() > modeChangeAt + 1500 && !busy) refresh()
             }
         }
         hero.addView(chrono)
@@ -227,7 +234,7 @@ class MainActivity : Activity() {
         root.addView(hero)
 
         // Jadwal
-        val sched = card("JADWAL HARI INI")
+        val sched = card("TODAY'S SCHEDULE")
         for (i in 0..4) {
             val row = LinearLayout(this).apply {
                 orientation = LinearLayout.HORIZONTAL
@@ -255,18 +262,18 @@ class MainActivity : Activity() {
             bellViews.add(bell)
             rowBoxes.add(row)
         }
-        sched.addView(tv("Ketuk lonceng untuk menyalakan/mematikan pengingat tiap waktu.", 11f, cMuted, false)
+        sched.addView(tv("Tap the bell to turn the alert on/off for each prayer.", 11f, cMuted, false)
             .apply { setPadding(dp(12), dp(6), 0, 0) })
         root.addView(sched)
 
         // Pengingat
-        val remind = card("PENGINGAT")
+        val remind = card("ALERTS")
         val seg = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             background = shape(Color.parseColor("#12292D"), 14)
             setPadding(dp(4), dp(4), dp(4), dp(4))
         }
-        val labels = listOf("Mati", "Notifikasi", "Adzan")
+        val labels = listOf("Off", "Notification", "Adhan")
         for (m in 0..2) {
             val v = tv(labels[m], 14f, cMuted, true).apply {
                 gravity = Gravity.CENTER
@@ -283,16 +290,16 @@ class MainActivity : Activity() {
         remind.addView(seg)
         adzanText = tv("", 13f, cMuted, false).apply { setPadding(0, dp(12), 0, dp(8)) }
         remind.addView(adzanText)
-        remind.addView(fullWidth(pill("Pilih file suara adzan", false) {
+        remind.addView(fullWidth(pill("Choose adhan audio file", false) {
             val i = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
                 addCategory(Intent.CATEGORY_OPENABLE)
                 type = "audio/*"
             }
             startActivityForResult(i, 100)
         }))
-        remind.addView(fullWidth(pill("Tes pengingat sekarang", true) {
+        remind.addView(fullWidth(pill("Test alert now", true) {
             if (Settings.mode(this) == 0) {
-                Toast.makeText(this, "Pengingat sedang Mati", Toast.LENGTH_SHORT).show()
+                Toast.makeText(this, "Alerts are turned off", Toast.LENGTH_SHORT).show()
             } else {
                 val app = applicationContext
                 val idx = nextIdx
@@ -304,32 +311,44 @@ class MainActivity : Activity() {
         updateAdzanText()
 
         // Koreksi menit
-        val corr = card("KOREKSI MENIT")
-        corr.addView(stepper("Semua waktu", null) { d ->
+        val corr = card("MINUTE ADJUSTMENT")
+        corr.addView(stepper("All prayers", null, ::fmtOff) { d ->
             for (i in 0..4) Settings.setOffset(this, i, (Settings.offset(this, i) + d).coerceIn(-30, 30))
         })
         for (i in 0..4) {
-            corr.addView(stepper(PrayerRepo.NAMES[i], { Settings.offset(this, i) }) { d ->
+            corr.addView(stepper(PrayerRepo.NAMES[i], { Settings.offset(this, i) }, ::fmtOff) { d ->
                 Settings.setOffset(this, i, (Settings.offset(this, i) + d).coerceIn(-30, 30))
             })
         }
-        corr.addView(fullWidth(pill("Reset koreksi", false) {
+        corr.addView(fullWidth(pill("Reset adjustments", false) {
             for (i in 0..4) Settings.setOffset(this, i, 0)
             stepperUpdaters.forEach { it() }
             scheduleRefresh()
         }, 8))
-        corr.addView(tv("Dipakai untuk menyamakan dengan jadwal masjid / Kemenag (misalnya +2 menit).", 11f, cMuted, false)
+        corr.addView(tv("Use this to match your local mosque or Kemenag schedule (e.g. +2 minutes).", 11f, cMuted, false)
             .apply { setPadding(0, dp(8), 0, 0) })
         root.addView(corr)
 
+        // Tampilan: grace period
+        val disp = card("PRAYER DISPLAY")
+        disp.addView(stepper("Stay on current prayer", { Settings.grace(this) }, { "$it min" }) { d ->
+            Settings.setGrace(this, (Settings.grace(this) + d * 5).coerceIn(0, 60))
+        })
+        disp.addView(tv(
+            "After a prayer starts, the app and widget keep showing it (timer counts up) for this long " +
+                "before switching to the next prayer. Set 0 to switch immediately.",
+            11f, cMuted, false
+        ).apply { setPadding(0, dp(8), 0, 0) })
+        root.addView(disp)
+
         // Lokasi
-        val locCard = card("LOKASI")
+        val locCard = card("LOCATION")
         val locRow = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
         locRow.addView(pill("📍 GPS", false) { useGps() }.apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 .apply { rightMargin = dp(6) }
         })
-        locRow.addView(pill("Pilih kota", false) { pickCity() }.apply {
+        locRow.addView(pill("Choose city", false) { pickCity() }.apply {
             layoutParams = LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f)
                 .apply { leftMargin = dp(6) }
         })
@@ -337,12 +356,12 @@ class MainActivity : Activity() {
         root.addView(locCard)
 
         // Widget & info
-        root.addView(fullWidth(pill("Pasang widget ke home screen", true) { pinWidget() }))
+        root.addView(fullWidth(pill("Add widget to home screen", true) { pinWidget() }))
         status = tv("", 12f, cMuted, false).apply { setPadding(0, dp(14), 0, 0) }
         root.addView(status)
         root.addView(tv(
-            "Tips Xiaomi/HP lain: aktifkan Autostart dan set Baterai ke \"Tanpa batasan\" untuk app ini " +
-                "supaya adzan tetap tepat waktu. Volume adzan mengikuti volume alarm.",
+            "Xiaomi/other phones: enable Autostart and set Battery to \"No restrictions\" for this app " +
+                "so the adhan fires on time. Adhan volume follows the alarm volume.",
             12f, cMuted, false
         ).apply { setPadding(0, dp(8), 0, 0) })
 
@@ -375,48 +394,70 @@ class MainActivity : Activity() {
         busy = true
         val app = applicationContext
         locText.text = "📍 " + PrayerRepo.getLoc(app).label
-        status.text = "Memuat jadwal..."
+        status.text = "Loading schedule..."
         thread {
             var times: List<LocalTime>? = null
-            var nxt: Pair<Int, LocalDateTime>? = null
+            var st: PrayerRepo.Status? = null
             try {
                 Scheduler.rescheduleAndUpdate(app)
                 times = PrayerRepo.timesFor(app, LocalDate.now())
-                nxt = PrayerRepo.next(app, LocalDateTime.now())
+                st = PrayerRepo.status(app, LocalDateTime.now())
             } catch (e: Exception) {
             }
             runOnUiThread {
                 busy = false
-                render(times, nxt)
+                render(times, st)
             }
         }
     }
 
-    private fun render(times: List<LocalTime>?, nxt: Pair<Int, LocalDateTime>?) {
-        if (times == null || nxt == null) {
+    private fun render(times: List<LocalTime>?, st: PrayerRepo.Status?) {
+        if (times == null || st == null) {
+            heroLabel.text = "Next prayer"
             heroName.text = "—"
-            heroSub.text = "Tidak ada data"
+            heroSub.text = "No data"
             chrono.stop()
             chrono.text = "--:--"
-            status.text = "Gagal memuat. Cek internet lalu coba lagi."
+            modeChangeAt = Long.MAX_VALUE
+            status.text = "Failed to load. Check your connection and try again."
             return
         }
-        nextIdx = nxt.first
-        val tomorrow = nxt.second.toLocalDate() != LocalDate.now()
+        val now = LocalDateTime.now()
+        val cur = st.currentIdx
+        val ct = st.currentTime
+        val tomorrow = st.nextTime.toLocalDate() != LocalDate.now()
+        nextIdx = cur ?: st.nextIdx
+        val hlIdx = cur ?: (if (tomorrow) -1 else st.nextIdx)
         for (i in 0..4) {
-            val hl = i == nxt.first && !tomorrow
+            val hl = i == hlIdx
             nameViews[i].setTextColor(if (hl) cAccent else cText)
             timeViews[i].setTextColor(if (hl) cAccent else cText)
             timeViews[i].text = times[i].toString()
             rowBoxes[i].background = if (hl) shape(cRowActive, 14) else null
         }
-        heroName.text = PrayerRepo.NAMES[nxt.first]
-        heroSub.text = "pukul ${nxt.second.toLocalTime()}" + if (tomorrow) " (besok)" else ""
-        val remaining = Duration.between(LocalDateTime.now(), nxt.second).toMillis()
-        chronoBase = SystemClock.elapsedRealtime() + remaining
-        chrono.base = chronoBase
+        if (cur != null && ct != null) {
+            val elapsed = Duration.between(ct, now).toMillis()
+            val graceMs = Settings.grace(this) * 60_000L
+            heroLabel.text = "Prayer time now"
+            heroName.text = PrayerRepo.NAMES[cur]
+            heroSub.text = "since ${ct.toLocalTime()} • next: ${PrayerRepo.NAMES[st.nextIdx]} ${st.nextTime.toLocalTime()}"
+            chrono.setCountDown(false)
+            chrono.format = "+%s"
+            chrono.base = SystemClock.elapsedRealtime() - elapsed
+            modeChangeAt = SystemClock.elapsedRealtime() + (graceMs - elapsed)
+        } else {
+            val remaining = Duration.between(now, st.nextTime).toMillis()
+            val base = SystemClock.elapsedRealtime() + remaining
+            heroLabel.text = "Next prayer"
+            heroName.text = PrayerRepo.NAMES[st.nextIdx]
+            heroSub.text = "at ${st.nextTime.toLocalTime()}" + if (tomorrow) " (tomorrow)" else ""
+            chrono.setCountDown(true)
+            chrono.format = null
+            chrono.base = base
+            modeChangeAt = base
+        }
         chrono.start()
-        status.text = "Sumber: Aladhan API • metode Kemenag RI"
+        status.text = "Source: Aladhan API • Kemenag RI method"
     }
 
     private fun updateModeUi() {
@@ -430,9 +471,9 @@ class MainActivity : Activity() {
 
     private fun updateAdzanText() {
         adzanText.text = if (Settings.hasAdzan(this)) {
-            "Suara adzan: ${Settings.adzanName(this)}"
+            "Adhan audio: ${Settings.adzanName(this)}"
         } else {
-            "Belum ada file adzan. Pilih file audio (mp3/m4a) dari HP. Tanpa file, mode Adzan memakai notifikasi biasa."
+            "No adhan file yet. Choose an audio file (mp3/m4a) from your phone. Without a file, Adhan mode falls back to a normal notification."
         }
     }
 
@@ -443,7 +484,7 @@ class MainActivity : Activity() {
         if (requestCode != 100 || resultCode != RESULT_OK) return
         val uri = data?.data ?: return
         val app = applicationContext
-        Toast.makeText(this, "Menyalin file...", Toast.LENGTH_SHORT).show()
+        Toast.makeText(this, "Copying file...", Toast.LENGTH_SHORT).show()
         thread {
             val ok = try {
                 contentResolver.openInputStream(uri)!!.use { input ->
@@ -466,7 +507,7 @@ class MainActivity : Activity() {
                 updateAdzanText()
                 Toast.makeText(
                     this,
-                    if (ok) "File adzan disimpan" else "Gagal membaca file",
+                    if (ok) "Adhan file saved" else "Could not read file",
                     Toast.LENGTH_SHORT
                 ).show()
             }
@@ -481,7 +522,7 @@ class MainActivity : Activity() {
         } else {
             Toast.makeText(
                 this,
-                "Launcher tidak mendukung. Tambahkan lewat menu Widget di home screen.",
+                "Your launcher does not support this. Add it from the Widgets menu on the home screen.",
                 Toast.LENGTH_LONG
             ).show()
         }
@@ -489,7 +530,7 @@ class MainActivity : Activity() {
 
     private fun pickCity() {
         AlertDialog.Builder(this)
-            .setTitle("Pilih kota")
+            .setTitle("Choose city")
             .setItems(cities.map { it.first }.toTypedArray()) { _, i ->
                 val c = cities[i]
                 PrayerRepo.setLoc(this, c.second, c.third, c.first)
@@ -520,15 +561,15 @@ class MainActivity : Activity() {
         }
         val provider = providers.firstOrNull()
         if (provider == null) {
-            Toast.makeText(this, "Aktifkan layanan lokasi dulu", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Please turn on location services first", Toast.LENGTH_LONG).show()
             return
         }
-        status.text = "Mencari lokasi..."
+        status.text = "Finding location..."
         try {
             if (Build.VERSION.SDK_INT >= 30) {
                 lm.getCurrentLocation(provider, null, mainExecutor) { l ->
                     if (l != null) applyLocation(l)
-                    else Toast.makeText(this, "Lokasi tidak ditemukan", Toast.LENGTH_LONG).show()
+                    else Toast.makeText(this, "Location not found", Toast.LENGTH_LONG).show()
                 }
             } else {
                 @Suppress("DEPRECATION")
@@ -541,7 +582,7 @@ class MainActivity : Activity() {
                 }, Looper.getMainLooper())
             }
         } catch (e: SecurityException) {
-            Toast.makeText(this, "Izin lokasi ditolak", Toast.LENGTH_LONG).show()
+            Toast.makeText(this, "Location permission denied", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -551,7 +592,7 @@ class MainActivity : Activity() {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
         if (requestCode != 1) return
         if (grantResults.any { it == PackageManager.PERMISSION_GRANTED }) useGps()
-        else Toast.makeText(this, "Izin lokasi ditolak, pilih kota manual saja", Toast.LENGTH_LONG).show()
+        else Toast.makeText(this, "Location permission denied, please choose a city manually", Toast.LENGTH_LONG).show()
     }
 
     private fun applyLocation(l: Location) {

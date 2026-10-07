@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">Waktu Sholat</string>
-    <string name="widget_desc">Sholat berikutnya dan hitungan mundur</string>
+    <string name="app_name">Prayer Times</string>
+    <string name="widget_desc">Next prayer and live countdown</string>
 </resources>
